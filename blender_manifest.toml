@@ -1,0 +1,27 @@
+schema_version = "1.0.0"
+
+# Unique identifier of the extension.
+id = "matshelf"
+
+# Semantic versioning.
+version = "1.0.0"
+
+# Short title of the extension.
+name = "MatShelf"
+
+# Short description of the extension.
+tagline = "A visual material shelf and manager panel"
+
+# The maintainer/developer.
+maintainer = "haseebahmed295 <quicktiptech@gmail.com>"
+
+# Type of extension.
+type = "add-on"
+
+# Minimum Blender version supported.
+blender_version_min = "4.2.0"
+
+tags = ["Material", "Interface"]
+license = [
+    "SPDX:GPL-3.0-or-later",
+]
