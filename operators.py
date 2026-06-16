@@ -1,12 +1,13 @@
 import bpy
 import time
+from .helpers import get_material_categories
 
 # Category Add Operator
 class MATERIAL_OT_category_add(bpy.types.Operator):
     """Add a new category to the list"""
     bl_idname = "material.category_add"
     bl_label = "Add Category"
-    bl_options = {'INTERNAL'}
+    bl_options = {'REGISTER', 'UNDO'}
     
     def execute(self, context):
         scene = context.scene
@@ -21,7 +22,7 @@ class MATERIAL_OT_category_remove(bpy.types.Operator):
     """Remove the active category from the list"""
     bl_idname = "material.category_remove"
     bl_label = "Remove Category"
-    bl_options = {'INTERNAL'}
+    bl_options = {'REGISTER', 'UNDO'}
     
     def execute(self, context):
         scene = context.scene
@@ -65,6 +66,8 @@ class MATERIAL_OT_edit_categories(bpy.types.Operator):
         return {'FINISHED'}
         
     def invoke(self, context, event):
+        from .helpers import init_default_categories
+        init_default_categories(context.scene)
         return context.window_manager.invoke_props_dialog(self, width=350)
 
 # The Custom Operator to Assign Materials
@@ -88,11 +91,71 @@ class MATERIAL_OT_assign_from_manager(bpy.types.Operator):
             return {'CANCELLED'}
             
         for obj in selected_objs:
-            if len(obj.material_slots) > 0:
-                obj.material_slots[obj.active_material_index].material = mat
+            if obj.type == 'MESH' and obj.mode == 'EDIT':
+                import bmesh
+                
+                # Ensure the material is in the object's slots
+                slot_idx = -1
+                for i, slot in enumerate(obj.material_slots):
+                    if slot.material == mat:
+                        slot_idx = i
+                        break
+                
+                if slot_idx == -1:
+                    obj.data.materials.append(mat)
+                    slot_idx = len(obj.material_slots) - 1
+                
+                # Assign to selected faces via bmesh
+                bm = bmesh.from_edit_mesh(obj.data)
+                for f in bm.faces:
+                    if f.select:
+                        f.material_index = slot_idx
+                bmesh.update_edit_mesh(obj.data)
+                
             else:
-                obj.data.materials.append(mat)
+                # Object mode / non-mesh fallback
+                if len(obj.material_slots) > 0:
+                    obj.material_slots[obj.active_material_index].material = mat
+                else:
+                    obj.data.materials.append(mat)
             
+        return {'FINISHED'}
+
+# Batch Assign Category Operator
+class MATERIAL_OT_batch_assign_category(bpy.types.Operator):
+    """Assign a category to all currently visible/filtered materials"""
+    bl_idname = "material.batch_assign_category"
+    bl_label = "Batch Set Category"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    target_category: bpy.props.EnumProperty(
+        name="Category",
+        items=get_material_categories
+    )
+    
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
+        
+    def execute(self, context):
+        wm = context.window_manager
+        search_query = wm.mat_search_filter.lower()
+        filter_category = wm.mat_filter_category
+        
+        count = 0
+        for mat in bpy.data.materials:
+            if search_query in mat.name.lower():
+                if filter_category != 'ALL' and mat.mat_category != filter_category:
+                    continue
+                mat.mat_category = self.target_category
+                count += 1
+                
+        self.report({'INFO'}, f"Assigned {count} material(s) to category.")
+        
+        for window in context.window_manager.windows:
+            for area in window.screen.areas:
+                if area.type == 'VIEW_3D':
+                    area.tag_redraw()
+                    
         return {'FINISHED'}
 
 # Operator to open the operations menu

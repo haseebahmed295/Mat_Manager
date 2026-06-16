@@ -45,6 +45,33 @@ def register_properties():
         name="Active Material Menu Name",
         default=""
     )
+    bpy.types.WindowManager.mat_display_type = bpy.props.EnumProperty(
+        name="Display Type",
+        description="Choose how to display the materials",
+        items=[
+            ('GRID', "Grid", "Display as a grid of thumbnails", 'VIEWPANEL', 0),
+            ('LIST', "List", "Display as a compact list", 'LINENUMBERS_OFF', 1)
+        ],
+        default='GRID',
+        update=update_search_filter
+    )
+    bpy.types.WindowManager.mat_show_sort_options = bpy.props.BoolProperty(
+        name="Show Sorting",
+        description="Show advanced sorting options",
+        default=False
+    )
+    bpy.types.WindowManager.mat_sort_method = bpy.props.EnumProperty(
+        name="Sort By",
+        description="Method to sort materials",
+        items=[
+            ('NAME_ASC', "Name (A-Z)", "Sort alphabetically A to Z", 'SORT_ALPHA', 0),
+            ('NAME_DESC', "Name (Z-A)", "Sort alphabetically Z to A", 'SORT_ALPHA', 1),
+            ('USERS_DESC', "Most Used", "Sort by number of users, highest first", 'GROUP', 2),
+            ('USERS_ASC', "Least Used", "Sort by number of users, lowest first", 'GROUP', 3),
+        ],
+        default='NAME_ASC',
+        update=update_search_filter
+    )
     bpy.types.Material.mat_category = bpy.props.EnumProperty(
         name="Category",
         description="Category of the material",
@@ -65,11 +92,11 @@ def register_properties():
         items=[
             ('SPHERE', "Sphere", "Sphere preview shape", 'SPHERE', 0),
             ('CUBE', "Cube", "Cube preview shape", 'CUBE', 1),
-            ('MONKEY', "Monkey", "Suzanne monkey head preview shape", 'MONKEY', 2),
-            ('SHADERBALL', "Shader Ball", "Shader ball preview shape", 'MATERIAL', 3),
-            ('FLAT', "Flat", "Flat XY plane preview shape", 'SURFACE', 4),
-            ('HAIR', "Hair", "Hair strands preview shape", 'STRAND', 5),
-            ('SPHERE_A', "World Sphere", "Large sphere with sky preview shape", 'WORLD', 6),
+            ('SHADERBALL', "Shader Ball", "Shader ball preview shape", 'MATERIAL', 2),
+            ('FLAT', "Flat", "Flat XY plane preview shape", 'SURFACE', 3),
+            ('HAIR', "Hair", "Hair strands preview shape", 'STRAND', 4),
+            ('CLOTH', "Cloth", "Cloth preview shape", 'MOD_CLOTH', 5),
+            ('FLUID', "Fluid", "Fluid preview shape", 'MOD_FLUID', 6),
         ],
         default='SPHERE',
         update=update_preview_shape
@@ -81,6 +108,9 @@ def unregister_properties():
     del bpy.types.WindowManager.mat_grid_columns
     del bpy.types.WindowManager.mat_filter_category
     del bpy.types.WindowManager.mat_active_menu_name
+    del bpy.types.WindowManager.mat_display_type
+    del bpy.types.WindowManager.mat_show_sort_options
+    del bpy.types.WindowManager.mat_sort_method
     del bpy.types.Material.mat_category
     del bpy.types.Scene.mat_categories_list
     del bpy.types.Scene.mat_categories_active_index

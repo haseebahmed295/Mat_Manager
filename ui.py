@@ -19,6 +19,11 @@ class MATERIAL_PT_refined_settings_popover(bpy.types.Panel):
         wm = context.window_manager
         scene = context.scene
         
+        layout.label(text="Layout Style:")
+        layout.prop(wm, "mat_display_type", expand=True)
+        
+        layout.separator()
+        
         layout.label(text="Grid Settings:")
         row = layout.row(align=True)
         row.prop(wm, "mat_grid_columns", text="Columns")
@@ -73,16 +78,22 @@ class MATERIAL_PT_refined_manager(bpy.types.Panel):
         layout = self.layout
         wm = context.window_manager
         obj = context.active_object
+        prefs = context.preferences.addons[__package__].preferences
+
+        if self.bl_space_type == 'PROPERTIES':
+            layout.label(text="MatShelf (Scene Tab)", icon='SCENE_DATA')
+            layout.separator()
 
         # --- Section 1: Active Object Context ---
-        box = layout.box()
-        if obj:
-            if obj.active_material:
-                box.label(text=f"Current: {obj.active_material.name}", icon='MATERIAL')
+        if prefs.show_context_warning:
+            box = layout.box()
+            if obj:
+                if obj.active_material:
+                    box.label(text=f"Current: {obj.active_material.name}", icon='MATERIAL')
+                else:
+                    box.label(text=f"{obj.name} has no material", icon='ERROR')
             else:
-                box.label(text=f"{obj.name} has no material", icon='ERROR')
-        else:
-            box.label(text="No object selected", icon='INFO')
+                box.label(text="No object selected", icon='INFO')
 
         # --- Section 2: Search Bar & Settings ---
         row_search = layout.row(align=True)
@@ -90,49 +101,106 @@ class MATERIAL_PT_refined_manager(bpy.types.Panel):
         row_search.prop(wm, "mat_search_filter", icon='VIEWZOOM', text="")
         row_search.popover(panel="MATERIAL_PT_refined_settings_popover", text="", icon='SETTINGS')
         
-        row_cat = layout.row(align=True)
+        # Category and Sorting
+        col = layout.column(align=True)
+        
+        row_cat = col.row(align=True)
         row_cat.prop(wm, "mat_filter_category", text="Category")
-        row_cat.operator("material.edit_categories", text="", icon='PREFERENCES')
+        row_cat.prop(wm, "mat_show_sort_options", icon='THREE_DOTS', text="", icon_only=True)
         
+        if wm.mat_show_sort_options:
+            row_sort = col.row(align=True)
+            row_sort.prop(wm, "mat_sort_method", text="Sort By")
+            
+        row_cat_ops = col.row(align=True)
+        row_cat_ops.operator("material.edit_categories", text="Edit Categories", icon='PREFERENCES')
+        row_cat_ops.operator("material.batch_assign_category", text="Batch Assign", icon='GROUP')
+    
         # Tools row
-        row_tools = layout.row(align=True)
-        row_tools.operator("material.merge_duplicates", text="Merge Duplicates", icon='AUTOMERGE_ON')
-        row_tools.operator("material.purge_unused", text="Purge Unused", icon='TRASH')
+        if prefs.show_utility_buttons:
+            row_tools = col.row(align=True)
+            row_tools.operator("material.merge_duplicates", text="Merge Duplicates", icon='AUTOMERGE_ON')
+            row_tools.operator("material.purge_unused", text="Purge Unused", icon='TRASH')
+            layout.separator()
         
-        layout.separator()
         search_query = wm.mat_search_filter.lower()
         filter_category = wm.mat_filter_category
 
-        # --- Section 3: The Material Grid ---
-        grid = layout.grid_flow(row_major=True, columns=wm.mat_grid_columns, even_columns=True, align=True)
+        # --- Section 3: The Material List / Grid ---
+        is_grid = (wm.mat_display_type == 'GRID')
         
-        match_count = 0
+        if prefs.use_collapsible_panel:
+            panel_header, panel_body = layout.panel("MATERIAL_PT_preview_subpanel", default_closed=False)
+            panel_header.label(text="Materials Preview", icon='MATERIAL')
+        else:
+            panel_body = layout
+        
+        if panel_body is not None:
+            if is_grid:
+                container = panel_body.grid_flow(row_major=True, columns=wm.mat_grid_columns, even_columns=True, align=True)
+            else:
+                container = panel_body.column(align=True)
+                
+            match_count = 0
+            
+            # Sorting logic
+            mats = list(bpy.data.materials)
+            sort_method = wm.mat_sort_method
+            if sort_method == 'NAME_ASC':
+                mats.sort(key=lambda m: m.name.lower())
+            elif sort_method == 'NAME_DESC':
+                mats.sort(key=lambda m: m.name.lower(), reverse=True)
+            elif sort_method == 'USERS_DESC':
+                mats.sort(key=lambda m: m.users, reverse=True)
+            elif sort_method == 'USERS_ASC':
+                mats.sort(key=lambda m: m.users)
 
-        for mat in bpy.data.materials:
-            if search_query in mat.name.lower():
-                # Filter by category
-                if filter_category != 'ALL' and mat.mat_category != filter_category:
-                    continue
+            for mat in mats:
+                if search_query in mat.name.lower():
+                    # Filter by category
+                    if filter_category != 'ALL' and mat.mat_category != filter_category:
+                        continue
+                        
+                    match_count += 1
+                    mat.preview_ensure()
                     
-                match_count += 1
-                col = grid.column(align=True)
-                
-                # Ensure the preview is generated/loaded
-                mat.preview_ensure()
-                
-                # The Thumbnail
-                col.template_icon(icon_value=layout.icon(mat), scale=wm.mat_preview_scale)
-                
-                # The Material Name
-                col.label(text=mat.name)
-                
-                # The Working Assign Button & Operations Dropdown
-                row = col.row(align=True)
-                op = row.operator("material.assign_from_manager", text="Assign")
-                op.mat_name = mat.name
-                
-                op_menu = row.operator("material.open_ops_menu", text="", icon='DOWNARROW_HLT')
-                op_menu.mat_name = mat.name
+                    if is_grid:
+                        box = container.box()
+                        
+                        # The Thumbnail (Nice and large)
+                        box.template_icon(icon_value=layout.icon(mat), scale=wm.mat_preview_scale)
+                        
+                        # The Material Name
+                        box.label(text=mat.name)
+                        
+                        # Action Buttons Row
+                        row = box.row(align=True)
+                        op_assign = row.operator("material.assign_from_manager", text="Assign")
+                        op_assign.mat_name = mat.name
+                        
+                        op_select = row.operator("material.ops_select_users", text="", icon='RESTRICT_SELECT_OFF')
+                        op_select.mat_name = mat.name
+                        
+                        op_menu = row.operator("material.open_ops_menu", text="", icon='DOWNARROW_HLT')
+                        op_menu.mat_name = mat.name
+                    else:
+                        # List view item
+                        row = container.row(align=True)
+                        
+                        # Thumbnail and Name
+                        row.template_icon(icon_value=layout.icon(mat), scale=1.0)
+                        row.label(text=mat.name)
+                        
+                        # Action Buttons Row (Right aligned)
+                        actions = row.row(align=True)
+                        op_assign = actions.operator("material.assign_from_manager", text="", icon='CHECKMARK')
+                        op_assign.mat_name = mat.name
+                        
+                        op_select = actions.operator("material.ops_select_users", text="", icon='RESTRICT_SELECT_OFF')
+                        op_select.mat_name = mat.name
+                        
+                        op_menu = actions.operator("material.open_ops_menu", text="", icon='DOWNARROW_HLT')
+                        op_menu.mat_name = mat.name
 
-        if match_count == 0:
-            layout.label(text="No materials found.", icon='INFO')
+            if match_count == 0:
+                panel_body.label(text="No materials found.", icon='INFO')
